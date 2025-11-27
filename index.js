@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://YOUR_SUPABASE_URL';
-const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
+const supabaseUrl = 'https://pmiqbxhoahzhfavcuujw.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtaXFieGhvYWh6aGZhdmN1dWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxNzM1OTEsImV4cCI6MjA3OTc0OTU5MX0.ivtBb7DOFMw7tek_zeXZPmiAk9GdutK03iaPcBfl7nI';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
