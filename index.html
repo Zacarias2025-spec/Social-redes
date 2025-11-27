@@ -1,12 +1,3 @@
-<!--
-  Esfera Conectada - Single-file web app (HTML + JS + CSS)
-  Instruções rápidas:
-  1) Substitua SUPABASE_URL e SUPABASE_ANON_KEY abaixo OU configure como variáveis de ambiente no deploy (recomendado).
-  2) Crie as tabelas no Supabase com o SQL do README.
-  3) Crie buckets: avatars, post_media, message_files
-  4) Deploy no Vercel (static).
--->
-
 <!doctype html>
 <html lang="pt">
 <head>
@@ -46,6 +37,7 @@
     .media-preview{max-width:100%;height:auto;border-radius:8px}
     .link{color:var(--primary);text-decoration:underline;cursor:pointer}
     footer{padding:12px;text-align:center;color:var(--muted);font-size:12px}
+    .hidden{display:none}
     /* responsive */
     @media (max-width:900px){.grid{grid-template-columns:1fr}}
   </style>
@@ -82,7 +74,7 @@
             </div>
           </div>
 
-          <div id="register-form" class="card" style="display:none">
+          <div id="register-form" class="card hidden">
             <h4>Registrar</h4>
             <input id="reg-email" placeholder="Email" />
             <input id="reg-password" type="password" placeholder="Senha" />
@@ -95,7 +87,7 @@
             </div>
           </div>
 
-          <div id="recover-form" class="card" style="display:none">
+          <div id="recover-form" class="card hidden">
             <h4>Recuperar senha</h4>
             <input id="rec-email" placeholder="Email" />
             <div class="row">
@@ -110,7 +102,7 @@
       <div class="grid">
         <div>
           <!-- Create post -->
-          <div id="create-post" class="card" style="display:none">
+          <div id="create-post" class="card hidden">
             <h3>Novo Post</h3>
             <textarea id="post-text" rows="4" placeholder="O que você quer compartilhar?"></textarea>
             <input id="post-media" type="file" accept="image/*,audio/*,video/*" />
@@ -118,7 +110,7 @@
               <button id="btn-post">Publicar</button>
               <button id="btn-clear-post" style="background:#999">Limpar</button>
             </div>
-            <div class="small">Aceita imagens, vídeos curtos, áudios (max 3MB). Links do YouTube / TikTok serão embedados.</div>
+            <div class="small">Aceita imagens, vídeos curtos, áudios (max 10MB). Links do YouTube / TikTok serão embedados se colados no texto.</div>
           </div>
 
           <!-- Feed -->
@@ -167,7 +159,7 @@
       </div>
 
       <!-- Profile full page modal -->
-      <div id="profile-page" class="card" style="display:none">
+      <div id="profile-page" class="card hidden">
         <div style="display:flex;align-items:center;gap:12px">
           <img id="profile-avatar" class="avatar" src="" />
           <div>
@@ -190,7 +182,7 @@
       </div>
 
       <!-- Chat modal -->
-      <div id="chat-page" class="card" style="display:none">
+      <div id="chat-page" class="card hidden">
         <div style="display:flex;gap:12px;align-items:center">
           <div>
             <img id="chat-avatar" class="avatar" src="" />
@@ -221,7 +213,7 @@
       </div>
 
       <!-- Post page -->
-      <div id="post-page" class="card" style="display:none">
+      <div id="post-page" class="card hidden">
         <div id="post-content-area"></div>
         <div style="margin-top:8px">
           <button id="btn-back-feed" style="background:#999">Voltar</button>
@@ -229,7 +221,7 @@
       </div>
 
       <!-- Profile edit modal -->
-      <div id="profile-edit" class="card" style="display:none">
+      <div id="profile-edit" class="card hidden">
         <h3>Editar Perfil</h3>
         <input id="edit-display" placeholder="Nome de exibição" />
         <input id="edit-username" placeholder="Nome de usuário (único)" />
@@ -255,29 +247,31 @@
   </div>
 
 <script type="module">
-  // Substitua com suas variáveis de ambiente/recomende usar em Vercel:
-  // Preferível: defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY no ambiente
+  // ====== CONFIGURE AQUI (ou usar variáveis de ambiente no deploy) ======
+  // Recomendo fortemente usar VARIÁVEIS de ambiente no Vercel:
+  // NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
   const SUPABASE_URL = (window.__env && window.__env.NEXT_PUBLIC_SUPABASE_URL) || 'YOUR_SUPABASE_URL';
   const SUPABASE_ANON_KEY = (window.__env && window.__env.NEXT_PUBLIC_SUPABASE_ANON_KEY) || 'YOUR_SUPABASE_ANON_KEY';
+  // ===================================================================
 
-  // Validação mínima
   if (!SUPABASE_URL || SUPABASE_URL === 'YOUR_SUPABASE_URL') {
-    console.warn('Substitua SUPABASE_URL e SUPABASE_ANON_KEY antes de usar.');
+    console.warn('Substitua SUPABASE_URL e SUPABASE_ANON_KEY antes de usar (recomenda-se variáveis de ambiente).');
   }
 
+  // carrega o cliente Supabase v2 via CDN (ESM)
   import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm').then(({ createClient }) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { realtime: { params: { eventsPerSecond: 10 } } });
 
-    // App state
+    // --- Estado ---
     let currentUser = null;
     let profile = null;
+    let currentChatTo = null;
     let editingMessageId = null;
 
-    // DOM refs
+    // --- DOM refs ---
     const authArea = document.getElementById('auth-area');
     const authCard = document.getElementById('auth-card');
-    const createPost = document.getElementById('create-post');
-    const feed = document.getElementById('feed');
+    const createPostEl = document.getElementById('create-post');
     const postsList = document.getElementById('posts-list');
     const miniAvatar = document.getElementById('mini-avatar');
     const miniDisplay = document.getElementById('mini-display');
@@ -291,7 +285,7 @@
     const notificationsEl = document.getElementById('notif-list');
     const postPage = document.getElementById('post-page');
 
-    // helpers
+    // helper DOM
     function el(tag, attrs={}, text='') {
       const e = document.createElement(tag);
       for (const k in attrs) {
@@ -301,11 +295,12 @@
       if (text) e.textContent = text;
       return e;
     }
-    function show(id) { id.style.display = ''; }
-    function hide(id) { id.style.display = 'none'; }
-    function fmtDate(d){ return new Date(d).toLocaleString(); }
+    function show(dom){ dom.classList.remove('hidden'); dom.style.display = ''; }
+    function hide(dom){ dom.classList.add('hidden'); dom.style.display = 'none'; }
+    function fmtDate(d){ if(!d) return ''; return new Date(d).toLocaleString(); }
+    function safeText(t){ const d=document.createElement('div'); d.textContent=t||''; return d.innerHTML; }
 
-    // Auth handlers
+    // --- UI handlers (auth forms) ---
     document.getElementById('btn-show-register').onclick = () => {
       hide(document.getElementById('login-form'));
       show(document.getElementById('register-form'));
@@ -314,25 +309,31 @@
       show(document.getElementById('login-form'));
       hide(document.getElementById('register-form'));
     };
+
     document.getElementById('btn-register').onclick = async () => {
-      const email = document.getElementById('reg-email').value;
+      const email = document.getElementById('reg-email').value.trim();
       const pass = document.getElementById('reg-password').value;
       const pass2 = document.getElementById('reg-password2').value;
-      const display = document.getElementById('reg-display').value || '';
-      const username = (document.getElementById('reg-username').value || '').replace(/^@/,'').toLowerCase();
+      const display = (document.getElementById('reg-display').value || '').trim();
+      const username = (document.getElementById('reg-username').value || '').replace(/^@/,'').toLowerCase().trim();
 
       if (!email || !pass || pass !== pass2) return alert('Verifique email e senhas (iguais).');
-      // cria usuário no supabase auth
-      const { user, error } = await supabase.auth.signUp({ email, password: pass });
+      if (!username) return alert('Escolha um nome de usuário.');
+      // checa username único
+      const { data:dupe } = await supabase.from('profiles').select('id').eq('username', username).maybeSingle();
+      if (dupe) return alert('Nome de usuário já em uso.');
+
+      const { data, error } = await supabase.auth.signUp({ email, password: pass, options:{ data: { full_name: display } }});
       if (error) return alert('Erro ao criar conta: '+error.message);
-      // cria registro na tabela profiles (será criado via trigger se preferir)
-      // armazenamos display e username no perfil depois do login/confirm
-      alert('Conta criada. Confira seu email para confirmação se estiver habilitado. Faça login.');
+      alert('Conta criada. Verifique seu email para confirmar (se configurado). Faça login em seguida.');
+      show(document.getElementById('login-form'));
+      hide(document.getElementById('register-form'));
     };
 
     document.getElementById('btn-login').onclick = async () => {
-      const email = document.getElementById('login-email').value;
+      const email = document.getElementById('login-email').value.trim();
       const pass = document.getElementById('login-password').value;
+      if (!email || !pass) return alert('Preencha email e senha.');
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
       if (error) return alert('Erro login: '+error.message);
       currentUser = data.user;
@@ -341,35 +342,36 @@
     };
 
     document.getElementById('btn-send-recover').onclick = async () => {
-      const email = document.getElementById('rec-email').value;
+      const email = document.getElementById('rec-email').value.trim();
+      if (!email) return alert('Preencha o email.');
       const { data, error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
       if (error) return alert('Erro: '+error.message);
-      alert('Email de recuperação enviado.');
+      alert('Email de recuperação enviado, verifique a sua caixa de entrada.');
+      hide(document.getElementById('recover-form'));
+      show(document.getElementById('login-form'));
     };
     document.getElementById('btn-cancel-recover').onclick = () => { show(document.getElementById('login-form')); hide(document.getElementById('recover-form')); };
     document.getElementById('btn-recover').onclick = () => { hide(document.getElementById('login-form')); show(document.getElementById('recover-form')); };
 
-    // Logout
-    document.getElementById('btn-logout').onclick = async () => {
+    // logout
+    btnLogout.onclick = async () => {
       await supabase.auth.signOut();
       location.reload();
     };
 
-    // Ensure profile exists
+    // ensure profile exists
     async function ensureProfileExists(){
-      const session = supabase.auth.getSession().then(r=>r.data.session).catch(()=>null);
-      const s = await session;
+      const s = (await supabase.auth.getSession()).data.session;
       if (!s) return;
       currentUser = s.user;
-      const { data } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single().maybeSingle();
+      const { data } = await supabase.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
       if (!data) {
-        // create empty profile with defaults; username must be unique, fallback to user id
         const defaultusername = (currentUser.email || currentUser.id).split('@')[0].replace(/[^a-z0-9]/gi,'').toLowerCase().slice(0,20);
         await supabase.from('profiles').insert([{ id: currentUser.id, display_name: currentUser.user_metadata?.full_name || defaultusername, username: defaultusername }]);
       }
     }
 
-    // Init on load if already logged in
+    // auth state change
     supabase.auth.onAuthStateChange((event, session) => {
       if (session && session.user) {
         currentUser = session.user;
@@ -379,15 +381,15 @@
       }
     });
 
+    // init app after login
     async function initApp(){
-      // load profile
       const { data } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single();
       profile = data;
       renderAuthArea();
       renderMiniProfile();
-      show(createPost);
+      show(createPostEl);
       hide(authCard);
-      loadFeed();
+      await loadFeed();
       subscribeRealtime();
       loadNotifications();
       loadChatList();
@@ -396,21 +398,19 @@
     function renderAuthArea(){
       authArea.innerHTML = '';
       const p = el('div',{}, '');
-      const a = el('span',{}, profile.display_name || 'Você');
+      const a = el('div',{}, profile.display_name || 'Você');
+      const small = el('div',{class:'small'}, profile.username ? '@'+profile.username : '');
       p.appendChild(a);
-      const small = el('div',{class:'small'}, '');
-      small.textContent = profile.username ? '@'+profile.username : '';
       p.appendChild(small);
       authArea.appendChild(p);
     }
-
     function renderMiniProfile(){
       miniAvatar.src = profile.avatar_url || 'https://via.placeholder.com/48';
       miniDisplay.textContent = profile.display_name || '';
       miniUsername.textContent = profile.username ? '@'+profile.username : '';
     }
 
-    // Profile edit
+    // --- Perfil editar ---
     btnEditProfile.onclick = () => {
       show(profileEdit);
       document.getElementById('edit-display').value = profile.display_name || '';
@@ -421,16 +421,12 @@
       document.getElementById('edit-bio').value = profile.bio || '';
       document.getElementById('edit-lang').value = profile.lang_pref || 'pt';
     };
+    document.getElementById('btn-cancel-profile').onclick = () => hide(profileEdit);
+
     document.getElementById('btn-save-profile').onclick = async () => {
-      const display = document.getElementById('edit-display').value;
-      const username = (document.getElementById('edit-username').value || '').replace(/^@/,'').toLowerCase();
-      // check unique username
-      const uniqueCheck = await supabase.from('profiles').select('id').eq('username', username).maybeSingle();
-      if (uniqueCheck.data && uniqueCheck.data.id !== profile.id) return alert('Nome de usuário já em uso');
-      // upload avatar if any
-      const avatarFile = document.getElementById('edit-avatar').files[0];
-      let avatar_url = profile.avatar_url;
-      if (avatarFile) {
-        const fname = `avatars/${profile.id}/${Date.now()}_${avatarFile.name}`;
-        const { data:up, error:err } = await supabase.storage.from('avatars').upload(fname, avatarFile, { upsert: false });
-        if (err) console.warn('Erro upload ava
+      const display = document.getElementById('edit-display').value.trim();
+      const username = (document.getElementById('edit-username').value || '').replace(/^@/,'').toLowerCase().trim();
+      const location = document.getElementById('edit-location').value.trim();
+      const contact = document.getElementById('edit-contact').value.trim();
+      const education = document.getElementById('edit-education').value.trim();
+      const bio = document.getElementById('ed
